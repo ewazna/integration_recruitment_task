@@ -13,7 +13,7 @@ export class CandidatesController {
     response.setHeader('Content-Type', 'text/csv');
     response.setHeader(
       'Content-Disposition',
-      'attachment; filename="users.csv"',
+      'attachment; filename="candidates.csv"',
     );
 
     response.send(csvFileRows);
