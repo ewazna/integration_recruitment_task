@@ -1,9 +1,15 @@
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { GetAllCandidatesResponseDto } from '../dto/getAllCandidatesResponse.dto';
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CandidatesJobApplications } from '../models/candidatesJobApplications';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
 @Injectable()
 export class CandidatesRepository {
@@ -11,6 +17,10 @@ export class CandidatesRepository {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
   ) {}
+
+  private readonly logger = new Logger(CandidatesRepository.name, {
+    timestamp: true,
+  });
 
   async *getAllCandidates(
     signal: AbortSignal,
@@ -26,9 +36,11 @@ export class CandidatesRepository {
     let requestUrl = `${baseUrl}/candidates?include=job-applications&page[size]=30`;
 
     while (true) {
-      let data: GetAllCandidatesResponseDto;
+      let candidateResponse: GetAllCandidatesResponseDto;
       try {
-        data = (
+        this.logger.log(`Outgoing request for ${requestUrl}`);
+
+        candidateResponse = (
           await firstValueFrom(
             this.httpService.get<GetAllCandidatesResponseDto>(requestUrl, {
               headers: {
@@ -43,16 +55,40 @@ export class CandidatesRepository {
         if (signal.aborted) {
           return;
         }
+
+        this.logger.error(`Error during fetching ${requestUrl}`);
         throw error;
       }
 
-      yield { candidates: data.data, jobApplications: data.included };
+      await this.validateCandidatesResponse(candidateResponse);
 
-      if (!data.links.next) {
+      yield {
+        candidates: candidateResponse.data,
+        jobApplications: candidateResponse.included,
+      };
+
+      if (!candidateResponse.links.next) {
         break;
       }
 
-      requestUrl = data.links.next;
+      requestUrl = candidateResponse.links.next;
+    }
+  }
+
+  private async validateCandidatesResponse(data: GetAllCandidatesResponseDto) {
+    const dataInstance = plainToInstance(GetAllCandidatesResponseDto, data, {
+      excludeExtraneousValues: true,
+    });
+    const errors = await validate(dataInstance);
+
+    if (errors.length > 0) {
+      this.logger.error(
+        'External API response validation failed.',
+        JSON.stringify(errors),
+      );
+      throw new InternalServerErrorException(
+        'External API response validation failed.',
+      );
     }
   }
 }

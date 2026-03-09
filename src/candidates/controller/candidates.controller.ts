@@ -1,4 +1,4 @@
-import { Controller, Get, Req, Res } from '@nestjs/common';
+import { Controller, Get, Logger, Req, Res } from '@nestjs/common';
 import { CandidatesService } from '../service/candidates.service';
 import type { Response, Request } from 'express';
 import { pipeline } from 'stream/promises';
@@ -8,8 +8,13 @@ import { Readable } from 'stream';
 export class CandidatesController {
   constructor(private readonly candidatesService: CandidatesService) {}
 
+  private readonly logger = new Logger(CandidatesController.name, {
+    timestamp: true,
+  });
+
   @Get()
   async exportCSVFile(@Req() request: Request, @Res() response: Response) {
+    this.logger.log('Incomming request for candidates CSV file.');
     const abortController = new AbortController();
 
     request.on('close', () => {
