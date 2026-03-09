@@ -12,45 +12,47 @@ export class CandidatesRepository {
     private readonly httpService: HttpService,
   ) {}
 
-  async getAllCandidates(): Promise<CandidatesJobApplications> {
-    const baseUrl = this.configService.get<string>('API_BASE_URL');
-
-    const firstRequestData = await this.getSinglePageData(
-      `${baseUrl}/candidates?include=job-applications&page[size]=30`,
-    );
-
-    const candidates = firstRequestData.data;
-    const jobApplications = firstRequestData.included;
-    const numberOfPages = firstRequestData.meta['page-count'];
-    let nextRequestUrl = firstRequestData.links.next;
-
-    let pageCounter = 1;
-
-    while (pageCounter < numberOfPages) {
-      const data = await this.getSinglePageData(nextRequestUrl);
-      nextRequestUrl = data.links.next;
-      candidates.push(...data.data);
-      jobApplications.push(...data.included);
-      pageCounter++;
+  async *getAllCandidates(
+    signal: AbortSignal,
+  ): AsyncGenerator<CandidatesJobApplications> {
+    if (signal.aborted) {
+      return;
     }
 
-    return { candidates, jobApplications };
-  }
-
-  private async getSinglePageData(
-    url: string,
-  ): Promise<GetAllCandidatesResponseDto> {
     const apiKey = this.configService.get<string>('API_KEY');
     const xApiVersion = this.configService.get<string>('X_API_VERSION');
+    const baseUrl = this.configService.get<string>('API_BASE_URL');
 
-    const { data } = await firstValueFrom(
-      this.httpService.get<GetAllCandidatesResponseDto>(url, {
-        headers: {
-          Authorization: `Token token=${apiKey}`,
-          'X-Api-Version': xApiVersion,
-        },
-      }),
-    );
-    return data;
+    let requestUrl = `${baseUrl}/candidates?include=job-applications&page[size]=30`;
+
+    while (true) {
+      let data: GetAllCandidatesResponseDto;
+      try {
+        data = (
+          await firstValueFrom(
+            this.httpService.get<GetAllCandidatesResponseDto>(requestUrl, {
+              headers: {
+                Authorization: `Token token=${apiKey}`,
+                'X-Api-Version': xApiVersion,
+              },
+              signal,
+            }),
+          )
+        ).data;
+      } catch (error) {
+        if (signal.aborted) {
+          return;
+        }
+        throw error;
+      }
+
+      yield { candidates: data.data, jobApplications: data.included };
+
+      if (!data.links.next) {
+        break;
+      }
+
+      requestUrl = data.links.next;
+    }
   }
 }

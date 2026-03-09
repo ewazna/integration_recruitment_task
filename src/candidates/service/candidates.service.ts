@@ -5,40 +5,40 @@ import { CandidatesRepository } from '../repository/candidates.repository';
 export class CandidatesService {
   constructor(private readonly candidatesRepository: CandidatesRepository) {}
 
-  async getAllCandidatesData(): Promise<string> {
-    const { candidates, jobApplications } =
-      await this.candidatesRepository.getAllCandidates();
+  async *getAllCandidatesData(signal: AbortSignal): AsyncGenerator<string> {
+    yield 'candidate_id,first_name,last_name,email,job_application_id,job_application_created_at\n';
 
-    const jobApplicationsMap: Map<string, string> = new Map();
+    for await (const data of this.candidatesRepository.getAllCandidates(
+      signal,
+    )) {
+      const { candidates, jobApplications } = data;
 
-    jobApplications.forEach((jobApplication) =>
-      jobApplicationsMap.set(
-        jobApplication.id,
-        jobApplication.attributes['created-at'],
-      ),
-    );
+      const jobApplicationsMap: Map<string, string> = new Map();
 
-    const csvFileData = candidates.flatMap((candidate) => {
-      return candidate.relationships['job-applications'].data.map(
-        ({ id: jobId }) => {
-          return {
-            candidate_id: candidate.id,
-            first_name: candidate.attributes['first-name'] || '',
-            last_name: candidate.attributes['last-name'] || '',
-            email: candidate.attributes.email || '',
-            job_application_id: jobId || '',
-            job_application_created_at:
-              jobApplicationsMap.get(`${jobId}`) || '',
-          };
-        },
+      jobApplications.forEach((jobApplication) =>
+        jobApplicationsMap.set(
+          jobApplication.id,
+          jobApplication.attributes['created-at'],
+        ),
       );
-    });
 
-    const header = Object.keys(csvFileData[0]).join(',') + '\n';
+      const csvFileData = candidates.flatMap((candidate) => {
+        return candidate.relationships['job-applications'].data.map(
+          ({ id: jobId }) => {
+            return {
+              candidate_id: candidate.id,
+              first_name: candidate.attributes['first-name'] || '',
+              last_name: candidate.attributes['last-name'] || '',
+              email: candidate.attributes.email || '',
+              job_application_id: jobId || '',
+              job_application_created_at:
+                jobApplicationsMap.get(`${jobId}`) || '',
+            };
+          },
+        );
+      });
 
-    return (
-      header +
-      csvFileData.map((data) => Object.values(data).join(',')).join('\n')
-    );
+      yield csvFileData.map((data) => Object.values(data).join(',')).join('\n');
+    }
   }
 }
