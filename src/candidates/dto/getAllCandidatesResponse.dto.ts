@@ -23,7 +23,7 @@ export class LinksDto {
   @Expose()
   @IsString()
   @IsOptional()
-  next: string;
+  next?: string;
 }
 
 export class GetAllCandidatesResponseDto {

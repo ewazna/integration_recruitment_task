@@ -38,7 +38,9 @@ export class CandidatesService {
         );
       });
 
-      yield csvFileData.map((data) => Object.values(data).join(',')).join('\n');
+      yield csvFileData
+        .map((data) => Object.values(data).join(',') + '\n')
+        .join('');
     }
   }
 }
